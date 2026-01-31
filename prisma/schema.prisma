@@ -1,0 +1,179 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =======================
+// ENUM
+// =======================
+enum Role {
+  ADMIN
+  PETUGAS
+  USER
+}
+
+enum StatusPeminjaman {
+  DIAJUKAN
+  DISETUJUI
+  DIANTAR
+  DIPAKAI
+  SELESAI
+  DITOLAK
+}
+
+enum MetodePengambilan {
+  AMBIL_SENDIRI
+  DIANTAR
+}
+
+// =======================
+// USER
+// =======================
+model User {
+  id        String @id @default(uuid())
+  email     String @unique
+  username  String @unique
+  password  String
+  role      Role
+
+  detail     UserDetail?
+  peminjaman Peminjaman[]
+  testimoni  Testimoni[]
+
+  createdAt DateTime @default(now())
+}
+
+
+// =======================
+// USER DETAIL (KTP)
+// =======================
+model UserDetail {
+  id           String @id @default(uuid())
+  userId       String @unique
+  user         User   @relation(fields: [userId], references: [id])
+
+  nama_lengkap String
+  no_hp        String
+  alamat       String
+
+  no_ktp       String?
+  foto_ktp     String?
+
+  is_lengkap   Boolean @default(false)
+}
+
+// =======================
+// KATEGORI
+// =======================
+model Kategori {
+  id    String @id @default(uuid())
+  nama  String
+
+  barang Barang[]
+}
+
+// =======================
+// BARANG
+// =======================
+model Barang {
+  id         String @id @default(uuid())
+  nama       String
+  stok       Int
+  harga_sewa Int
+
+  kategoriId String
+  kategori   Kategori @relation(fields: [kategoriId], references: [id])
+
+  items PeminjamanBarang[]
+  paketItems PaketBarang[]
+}
+
+// =======================
+// PAKET (OPSIONAL)
+// =======================
+model Paket {
+  id    String @id @default(uuid())
+  nama  String
+  harga Int
+
+  items PaketBarang[]
+}
+
+model PaketBarang {
+  id       String @id @default(uuid())
+  paketId  String
+  barangId String
+  jumlah   Int
+
+  paket  Paket  @relation(fields: [paketId], references: [id])
+  barang Barang @relation(fields: [barangId], references: [id])
+}
+
+// =======================
+// PEMINJAMAN (TRANSAKSI UTAMA)
+// =======================
+model Peminjaman {
+  id        String @id @default(uuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id])
+
+  tanggal_mulai   DateTime
+  tanggal_selesai DateTime
+  tanggal_kembali DateTime?
+
+  metode_pengambilan MetodePengambilan
+  alamat_event      String?
+
+  biaya_pengantaran Int @default(0)
+  biaya_pemasangan  Int @default(0)
+
+  denda         Int    @default(0)
+  catatan_rusak String?
+
+  total_biaya       Int
+  status_peminjaman StatusPeminjaman
+
+  items PeminjamanBarang[]
+  testimoni Testimoni[]
+
+  createdAt DateTime @default(now())
+}
+
+// =======================
+// RELASI PEMINJAMAN - BARANG
+// =======================
+model PeminjamanBarang {
+  id           String @id @default(uuid())
+  peminjamanId String
+  barangId     String
+
+  peminjaman   Peminjaman @relation(fields: [peminjamanId], references: [id])
+  barang       Barang     @relation(fields: [barangId], references: [id])
+
+  jumlah       Int
+  harga_satuan Int
+}
+
+model Testimoni {
+  id            String @id @default(uuid())
+  userId        String
+  peminjamanId  String @unique
+
+  user          User       @relation(fields: [userId], references: [id])
+  peminjaman    Peminjaman @relation(fields: [peminjamanId], references: [id])
+
+  rating        Int
+  komentar      String?
+
+  createdAt     DateTime @default(now())
+}
