@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Req } from '@nestjs/common';
 import { CekUserService } from './cek.service';
 import { JwtAuthGuard } from 'src/common/guards/jwt.guard';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
@@ -13,6 +13,12 @@ export class CekUserController {
     const dbUser = await this.userService.getUserById(user.userId);
     const isComplete = await this.userService.isUserDataComplete(user.userId);
 
-    return { user: dbUser, isComplete };
+    return { user: dbUser, isComplete, need_profile: !isComplete };
+  }
+
+  @Get('me/verification-status')
+  @UseGuards(JwtAuthGuard)
+  getMyVerification(@CurrentUser() user: { userId: string }) {
+    return this.userService.getMyVerificationStatus(user.userId);
   }
 }

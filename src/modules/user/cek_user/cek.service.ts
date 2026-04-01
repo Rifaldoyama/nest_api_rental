@@ -34,4 +34,25 @@ export class CekUserService {
     if (user.role !== 'USER') return true;
     return user.detail?.is_lengkap === true;
   }
+
+  async getMyVerificationStatus(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        detail: {
+          select: {
+            verification_status: true,
+          },
+        },
+      },
+    });
+
+    if (!user || !user.detail) {
+      return { status: 'PENDING' };
+    }
+
+    return {
+      status: user.detail.verification_status,
+    };
+  }
 }

@@ -5,28 +5,49 @@ const prisma = new PrismaClient();
 
 async function main() {
   const adminEmail = 'admin@gmail.com';
+  const petugasEmail = 'petugas@gmail.com';
 
   const existingAdmin = await prisma.user.findUnique({
     where: { email: adminEmail },
   });
 
-  if (existingAdmin) {
+  if (!existingAdmin) {
+    const hashedPassword = await bcrypt.hash('admin123', 12);
+
+    await prisma.user.create({
+      data: {
+        email: adminEmail,
+        username: 'admin',
+        password: hashedPassword,
+        role: Role.ADMIN,
+      },
+    });
+
+    console.log('🔥 Admin created');
+  } else {
     console.log('✅ Admin already exists');
-    return;
   }
 
-  const hashedPassword = await bcrypt.hash('admin123', 12);
-
-  await prisma.user.create({
-    data: {
-      email: adminEmail,
-      username: 'admin',
-      password: hashedPassword,
-      role: Role.ADMIN,
-    },
+  const existingPetugas = await prisma.user.findUnique({
+    where: { email: petugasEmail },
   });
 
-  console.log('🔥 Admin seeded successfully');
+  if (!existingPetugas) {
+    const hashedPasswordPet = await bcrypt.hash('petugas123', 12);
+
+    await prisma.user.create({
+      data: {
+        email: petugasEmail,
+        username: 'petugas',
+        password: hashedPasswordPet,
+        role: Role.PETUGAS,
+      },
+    });
+
+    console.log('🔥 Petugas created');
+  } else {
+    console.log('✅ Petugas already exists');
+  }
 }
 
 main()

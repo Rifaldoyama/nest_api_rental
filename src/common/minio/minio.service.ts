@@ -37,4 +37,27 @@ export class MinioService {
 
     return objectName;
   }
+  async delete(objectName: string) {
+    try {
+      await this.client.removeObject(this.bucket, objectName);
+      return true;
+    } catch (error) {
+      console.error(`Gagal menghapus file ${objectName} di Minio:`, error);
+      return false;
+    }
+  }
+
+  async getFileUrl(objectName: string) {
+    try {
+      // Generate URL yang berlaku selama 1 jam (3600 detik)
+      return await this.client.presignedGetObject(
+        this.bucket,
+        objectName,
+        3600,
+      );
+    } catch (error) {
+      console.error('Gagal generate URL Minio:', error);
+      return null;
+    }
+  }
 }
