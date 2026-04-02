@@ -14,6 +14,8 @@ import { AdminPeminjamanModule } from './modules/admin/kelola_peminjaman/kel-pem
 import { AdminKelPembayaranModule } from './modules/admin/kel-pembayaran/kel-pembayaran.module';
 import { UserPembayaranModule } from './modules/user/pembayaran/pembayaran.module';
 import { PaketModule } from './modules/admin/paket/paket.module';
+import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
+import { RiwayatTransaksiModule } from './modules/admin/riwayat-transaksi/riwayat-transaksi.module';
 
 @Module({
   imports: [
@@ -31,7 +33,9 @@ import { PaketModule } from './modules/admin/paket/paket.module';
     AdminPeminjamanModule,
     AdminKelPembayaranModule,
     UserPembayaranModule,
-    PaketModule
+    PaketModule,
+    DashboardModule,
+    RiwayatTransaksiModule,
   ],
   controllers: [],
   providers: [],

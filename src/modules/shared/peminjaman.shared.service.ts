@@ -72,7 +72,6 @@ export class PeminjamanSharedService {
     const sisa = totalSewa - dp;
 
     return {
-      biaya_tambahan: ongkir,
       total_biaya: total,
       nominal_dp: dp,
       sisa_tagihan: sisa,

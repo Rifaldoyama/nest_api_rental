@@ -42,7 +42,26 @@ export class PetugasPeminjamanService {
   }
 
   // Tahap 1: Petugas mulai mengantar atau menyiapkan barang
-  startDelivery(peminjamanId: string, petugasId: string) {
+  async startDelivery(peminjamanId: string, petugasId: string) {
+    const peminjaman = await this.prisma.peminjaman.findUnique({
+      where: { id: peminjamanId },
+    });
+
+    if (!peminjaman) {
+      throw new NotFoundException('Peminjaman tidak ditemukan');
+    }
+
+    // HARD RULE STATE MACHINE
+    if (
+      peminjaman.status_pinjam === StatusPeminjaman.DIPROSES ||
+      peminjaman.status_pinjam === StatusPeminjaman.DIPAKAI ||
+      peminjaman.status_pinjam === StatusPeminjaman.SELESAI
+    ) {
+      throw new BadRequestException(
+        `Tidak bisa start delivery dari status ${peminjaman.status_pinjam}`,
+      );
+    }
+
     return this.shared.updateStatus(peminjamanId, petugasId, {
       status_pinjam: StatusPeminjaman.DIPROSES,
     });
@@ -61,9 +80,11 @@ export class PetugasPeminjamanService {
 
     if (!peminjaman) throw new NotFoundException('Peminjaman tidak ditemukan');
 
-    if (peminjaman.status_pinjam !== StatusPeminjaman.DIPROSES)
-      throw new BadRequestException('Status tidak valid');
-
+    if (peminjaman.status_pinjam !== StatusPeminjaman.DIPROSES) {
+      throw new BadRequestException(
+        `Handover hanya bisa dilakukan dari status DIPROSES, saat ini: ${peminjaman.status_pinjam}`,
+      );
+    }
     let fotoPath: string | null = null;
 
     if (file) {
@@ -93,6 +114,16 @@ export class PetugasPeminjamanService {
     });
 
     if (!peminjaman) throw new NotFoundException('Peminjaman tidak ditemukan');
+
+    if (peminjaman.status_pinjam !== StatusPeminjaman.DIPAKAI) {
+      throw new BadRequestException(
+        `Return hanya bisa dari DIPAKAI, saat ini: ${peminjaman.status_pinjam}`,
+      );
+    }
+
+    if (dto.items.length !== peminjaman.items.length) {
+      throw new BadRequestException('Semua barang wajib diisi kondisi kembali');
+    }
 
     if (peminjaman.status_pinjam !== StatusPeminjaman.DIPAKAI)
       throw new BadRequestException('Status tidak valid untuk return');
@@ -177,7 +208,7 @@ export class PetugasPeminjamanService {
         tanggal_kembali: new Date(),
 
         // OPTIONAL tapi penting
-        total_biaya: peminjaman.total_biaya + totalDenda,
+        total_biaya: peminjaman.total_biaya,
         sisa_tagihan: totalDenda,
       },
     });

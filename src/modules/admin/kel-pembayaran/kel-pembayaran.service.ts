@@ -195,6 +195,27 @@ export class AdminKelPembayaranService {
           sisa_tagihan: newSisa,
         },
       });
+      // === TAMBAHAN LOGIC STOK ===
+      const items = await tx.peminjamanBarang.findMany({
+        where: { peminjamanId: peminjaman.id },
+      });
+
+      const shouldReduceStock =
+        pembayaran.tipe === TipePembayaran.FULL ||
+        (pembayaran.tipe === TipePembayaran.PELUNASAN &&
+          newStatusBayar === StatusPembayaran.LUNAS);
+
+      if (shouldReduceStock) {
+        for (const item of items) {
+          await tx.barang.update({
+            where: { id: item.barangId },
+            data: {
+              stok_tersedia: { decrement: item.jumlah },
+              stok_keluar: { increment: item.jumlah },
+            },
+          });
+        }
+      }
 
       return { message: 'Pembayaran berhasil diverifikasi' };
     });
