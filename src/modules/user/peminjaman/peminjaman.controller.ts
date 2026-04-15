@@ -17,7 +17,7 @@ import { Role } from '@prisma/client';
 import { CreatePeminjamanDto } from './dto/create-peminjaman.dto';
 import { RolesGuard } from 'src/common/guards/role.guard';
 import { MinioService } from 'src/common/minio/minio.service';
-import { PrismaService } from 'prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import type { Response } from 'express';
 import { TipePembayaran } from '@prisma/client';
 import { CreateTestimoniDto } from './dto/create-testimoni.dto';

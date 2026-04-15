@@ -13,7 +13,7 @@ import {
   JenisDenda,
   PeminjamanBiayaDetail,
 } from '@prisma/client';
-import { PrismaService } from 'prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { MinioService } from 'src/common/minio/minio.service';
 import { ReturnBarangDto } from './dto/return-barang.dto';
 import { ReturnJaminanDto } from './dto/return-jaminan.dto';

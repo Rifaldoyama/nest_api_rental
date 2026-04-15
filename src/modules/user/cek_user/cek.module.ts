@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CekUserController } from './cek.controller';
 import { CekUserService } from './cek.service';
-import { PrismaService } from 'prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Module({
   controllers: [CekUserController],
