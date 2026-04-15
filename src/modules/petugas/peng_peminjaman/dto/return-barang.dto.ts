@@ -1,5 +1,12 @@
-import { IsArray, ValidateNested, IsEnum, IsString } from 'class-validator';
-import { Type } from 'class-transformer';
+import {
+  IsArray,
+  ValidateNested,
+  IsEnum,
+  IsString,
+  IsOptional,
+  IsDateString,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
 import { KondisiBarang } from '@prisma/client';
 
 class ReturnItemDto {
@@ -11,8 +18,19 @@ class ReturnItemDto {
 }
 
 export class ReturnBarangDto {
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ReturnItemDto)
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [];
+      }
+    }
+    return value;
+  })
   items: ReturnItemDto[];
+
+  @IsOptional()
+  @IsDateString()
+  tanggal_kembali?: string;
 }

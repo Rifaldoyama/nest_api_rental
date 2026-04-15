@@ -21,4 +21,11 @@ export class CekUserController {
   getMyVerification(@CurrentUser() user: { userId: string }) {
     return this.userService.getMyVerificationStatus(user.userId);
   }
+
+  @Get('me/detail')
+  @UseGuards(JwtAuthGuard)
+  async getMyDetail(@CurrentUser() user: { userId: string }) {
+    const userDetail = await this.userService.getUserDetail(user.userId);
+    return { detail: userDetail };
+  }
 }

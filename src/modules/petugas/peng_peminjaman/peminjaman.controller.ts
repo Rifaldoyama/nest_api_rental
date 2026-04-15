@@ -17,6 +17,7 @@ import { generateSuratSerahTerima } from 'src/common/utils/generate-serah-terima
 
 import { PetugasPeminjamanService } from './peminjaman.service';
 import { PetugasHandoverDto } from './dto/petugas-handover.dto';
+import { ReturnJaminanDto } from './dto/return-jaminan.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ReturnBarangDto } from './dto/return-barang.dto';
 
@@ -70,6 +71,11 @@ export class PetugasPeminjamanController {
     return this.service.handover(id, req.user.userId, dto, file);
   }
 
+  @Patch(':id/confirm-arrival')
+  async confirmArrival(@Param('id') id: string, @Req() req) {
+    return this.service.confirmArrival(id, req.user.userId);
+  }
+
   @Patch(':id/return')
   @UseInterceptors(FileInterceptor('foto_pengembalian'))
   async returnBarang(
@@ -79,5 +85,16 @@ export class PetugasPeminjamanController {
     @Req() req,
   ) {
     return this.service.returnBarang(id, req.user.userId, dto, file);
+  }
+
+  @Patch(':id/kembalikan-jaminan')
+  @UseInterceptors(FileInterceptor('foto_bukti'))
+  async kembalikanJaminanFisik(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: ReturnJaminanDto,
+    @Req() req,
+  ) {
+    return this.service.kembalikanJaminanFisik(id, req.user.userId, dto, file);
   }
 }

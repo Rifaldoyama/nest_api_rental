@@ -1,11 +1,11 @@
 import {
-  Body,
   Controller,
-  Delete,
   Get,
-  Param,
-  Patch,
   Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -13,7 +13,6 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { MinioService } from 'src/common/minio/minio.service';
 import { BarangService } from './barang.service';
 import { CreateBarangDto } from './dto/tambah.dto';
 import { UpdateBarangDto } from './dto/edit.dto';
@@ -26,29 +25,56 @@ import { Role } from '@prisma/client';
 @Roles(Role.ADMIN)
 @Controller('admin/barang')
 export class BarangController {
-  constructor(
-    private readonly service: BarangService,
-    private readonly minioService: MinioService,
-  ) {}
+  constructor(private readonly service: BarangService) {}
 
   @Post()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 2 * 1024 * 1024 }, // 2MB
+    }),
+  )
   async create(
     @UploadedFile() file: Express.Multer.File,
     @Body('data') data: string,
   ) {
-    const dto: CreateBarangDto = JSON.parse(data);
+    if (!data) {
+      throw new BadRequestException('Data barang tidak boleh kosong');
+    }
+
+    let dto: CreateBarangDto;
+    try {
+      dto = JSON.parse(data);
+    } catch {
+      throw new BadRequestException('Format data tidak valid');
+    }
+
     return this.service.create(dto, file);
   }
 
   @Patch(':id')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
+  )
   async update(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @Body('data') data: string,
   ) {
-    const dto: UpdateBarangDto = JSON.parse(data);
+    if (!data) {
+      throw new BadRequestException('Data barang tidak boleh kosong');
+    }
+
+    let dto: UpdateBarangDto;
+    try {
+      dto = JSON.parse(data);
+    } catch {
+      throw new BadRequestException('Format data tidak valid');
+    }
+
     return this.service.update(id, dto, file);
   }
 

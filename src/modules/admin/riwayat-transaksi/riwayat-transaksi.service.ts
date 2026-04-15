@@ -77,6 +77,15 @@ export class RiwayatTransaksiService {
               createdAt: 'desc',
             },
           },
+          paket: {
+            include: {
+              items: {
+                include: {
+                  barang: true,
+                },
+              },
+            },
+          },
           approvedBy: true,
           deliveredBy: true,
           receivedBy: true,
@@ -167,12 +176,6 @@ export class RiwayatTransaksiService {
           deliveredBy: true,
           receivedBy: true,
         },
-        where: {
-          OR: [
-            { status_pinjam: { not: undefined } },
-            { status_bayar: { not: undefined } },
-          ],
-        },
       }),
 
       // Pembayaran verifications
@@ -241,7 +244,7 @@ export class RiwayatTransaksiService {
         price: item.harga_satuan,
         subtotal: item.jumlah * item.harga_satuan,
         category: item.barang.kategori.nama,
-        kondisiKeluar: item.kondisi_keluar,
+        kondisiKeluar: tx.kondisi_barang_keluar,
         kondisiKembali: item.kondisi_kembali,
       })),
       paket: tx.paket
@@ -249,7 +252,7 @@ export class RiwayatTransaksiService {
             id: tx.paket.id,
             name: tx.paket.nama,
             diskon: tx.paket.diskon_persen,
-            totalPaket: tx.paket.total_paket,
+            totalPaket: tx.paket.harga_final,
           }
         : null,
       dates: {
@@ -321,14 +324,21 @@ export class RiwayatTransaksiService {
   }
 
   private formatPeminjamanLog(tx: any) {
+    // Ambil timestamp yang valid, fallback ke current date jika tidak ada
+    let timestamp = tx.updatedAt || tx.createdAt;
+
+    // Jika masih null/undefined, gunakan current date
+    if (!timestamp) {
+      timestamp = new Date();
+    }
+
     return {
       id: `${tx.id}-status`,
       type: 'PEMINJAMAN',
-      action: `Status peminjaman berubah menjadi ${tx.status_pinjam}`,
-      user: tx.user.username,
-      timestamp: tx.updatedAt,
+      action: `Status peminjaman: ${tx.status_pinjam}`,
+      user: tx.user?.username || 'System',
+      timestamp: timestamp, // ✅ Pastikan valid
       details: {
-        oldStatus: tx._previousStatus,
         newStatus: tx.status_pinjam,
         transactionId: tx.id,
       },

@@ -11,6 +11,7 @@ import {
   KondisiBarang,
   JaminanTipe,
 } from '@prisma/client';
+import { PRICING } from 'src/common/constants/pricing.constants';
 
 type UpdateStatusPayload = {
   status_pinjam?: StatusPeminjaman;
@@ -42,71 +43,116 @@ export class PeminjamanSharedService {
   async recalculateBill(tx: any, peminjamanId: string, zonaId?: string | null) {
     const peminjaman = await tx.peminjaman.findUnique({
       where: { id: peminjamanId },
+      include: {
+        items: { include: { barang: true } },
+        paket: true,
+      },
     });
 
     if (!peminjaman) throw new NotFoundException('Peminjaman tidak ditemukan');
 
-    let biayaOngkir = 0;
+    // Hitung total hari
+    const startDate = new Date(peminjaman.tanggal_mulai);
+    const endDate = new Date(peminjaman.tanggal_selesai);
+    const totalHari =
+      Math.floor(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
+      ) + 1;
 
-    if (zonaId) {
-      const zona = await tx.zonaPengiriman.findUnique({
-        where: { id: zonaId },
-      });
-
-      if (zona) biayaOngkir = zona.biaya;
+    // Hitung nilai asli dan subtotal
+    let nilaiAsliPerHari = 0;
+    let subtotalBarang = 0;
+    if (peminjaman.paketId && peminjaman.paket) {
+      subtotalBarang = peminjaman.paket.harga_final; // Pakai harga diskon
+      for (const item of peminjaman.items) {
+        nilaiAsliPerHari += item.harga_satuan * item.jumlah; // Deposit dari nilai asli
+      }
+    } else {
+      for (const item of peminjaman.items) {
+        nilaiAsliPerHari += item.harga_satuan * item.jumlah;
+        subtotalBarang += item.harga_satuan * item.jumlah;
+      }
     }
 
-    const totalSewa = peminjaman.total_sewa;
-    const ongkir = biayaOngkir;
+    const totalNilaiAsli = nilaiAsliPerHari * totalHari;
 
-    const total = totalSewa + ongkir;
+    // Hitung total sewa dengan progressive pricing
+    const calculateTotalBiaya = (
+      subtotalPerHari: number,
+      totalHari: number,
+    ) => {
+      let total = 0;
+      if (totalHari >= 1)
+        total += subtotalPerHari * PRICING.PROGRESSIVE.DAY_1_MULTIPLIER; // Day 1: 100%
+      if (totalHari >= 2)
+        total += subtotalPerHari * PRICING.PROGRESSIVE.DAY_2_MULTIPLIER; // Day 2: 70%
+      if (totalHari > 2)
+        total +=
+          subtotalPerHari *
+          PRICING.PROGRESSIVE.DAY_3_PLUS_MULTIPLIER *
+          (totalHari - 2); // Day 3+: 50%
+      return Math.round(total);
+    };
 
-    const DP_PERCENT = 0.35;
-    const DEPOSIT_PERCENT = 0.4;
+    const totalSewa = calculateTotalBiaya(subtotalBarang, totalHari);
 
-    const dp = Math.round(totalSewa * DP_PERCENT);
-    const deposit =
-      peminjaman.jaminan_tipe === JaminanTipe.DEPOSIT_UANG
-        ? Math.round(totalSewa * DEPOSIT_PERCENT)
-        : 0;
-    const sisa = totalSewa - dp;
+    // Hitung ongkir dari PeminjamanBiayaDetail
+    const ongkirDetail = await tx.peminjamanBiayaDetail.findFirst({
+      where: { peminjamanId, tipe: 'ONGKIR' },
+    });
+    const ongkir = ongkirDetail?.jumlah ?? 0;
+
+    // Hitung deposit (40% dari total nilai asli)
+    const DEPOSIT_PERCENT = PRICING.DEPOSIT_PERCENT;
+    let deposit = Math.round(totalNilaiAsli * DEPOSIT_PERCENT);
+
+    // ✅ PERBAIKAN UTAMA
+    const totalBiaya = totalSewa + ongkir + deposit; // total yang harus dibayar + deposit
+    const totalTagihan = totalSewa + ongkir; // total yang harus dibayar USER (tanpa deposit)
+    const dp = Math.round(totalTagihan * PRICING.DP_PERCENT); // DP 35% dari totalTagihan
+    const sisaTagihan = totalTagihan - dp; // Sisa setelah DP
+
+    // ✅ Hitung ulang total_terbayar dari pembayaran yang sudah diverifikasi
+    const verifiedPayments = await tx.pembayaran.findMany({
+      where: {
+        peminjamanId,
+        status: 'VERIFIED',
+      },
+      include: { allocations: true },
+    });
+
+    let totalTerbayar = 0;
+    for (const payment of verifiedPayments) {
+      for (const alloc of payment.allocations) {
+        // Hanya hitung SEWA, DP, PELUNASAN (bukan DEPOSIT)
+        if (alloc.tipe !== 'DEPOSIT') {
+          totalTerbayar += alloc.jumlah;
+        }
+      }
+    }
+
+    const sisaTagihanAktual = totalTagihan - totalTerbayar;
+
+    await tx.peminjaman.update({
+      where: { id: peminjamanId },
+      data: { total_hari: totalHari },
+    });
 
     return {
-      total_biaya: total,
+      // Untuk update Peminjaman
+      total_sewa: totalSewa,
+      total_biaya: totalBiaya,
+      total_tagihan: totalTagihan,
+      total_nilai_asli: totalNilaiAsli,
       nominal_dp: dp,
-      sisa_tagihan: sisa,
-      deposit,
-      zonaId,
+      sisa_tagihan: sisaTagihanAktual,
+      deposit: deposit,
+      total_hari: totalHari,
+
+      // Untuk keperluan lain
+      ongkir: ongkir,
+      total_terbayar: totalTerbayar,
     };
-  }
-
-  // ==========================================
-  // GET ALL
-  // ==========================================
-
-  async findAll() {
-    return this.prisma.peminjaman.findMany({
-      include: {
-        user: {
-          include: {
-            detail: true,
-          },
-        },
-        items: {
-          include: {
-            barang: {
-              /* ... select barang ... */
-            },
-          },
-        },
-        paket: true,
-        approvedBy: { select: { id: true, username: true } },
-        deliveredBy: { select: { id: true, username: true } },
-        receivedBy: { select: { id: true, username: true } },
-        zona: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
   }
 
   // ==========================================
@@ -173,23 +219,16 @@ export class PeminjamanSharedService {
                 StatusPeminjaman.SIAP_DIPROSES,
                 StatusPeminjaman.DITOLAK,
               ],
-
               SIAP_DIPROSES: [StatusPeminjaman.DIPROSES],
-
               DIPROSES: [StatusPeminjaman.DIPAKAI],
-
               DIPAKAI: [StatusPeminjaman.SELESAI],
             }
           : {
-              MENUNGGU_PERSETUJUAN: [
-                StatusPeminjaman.SIAP_DIPROSES,
+              SIAP_DIPROSES: [
+                StatusPeminjaman.DIPROSES,
                 StatusPeminjaman.DITOLAK,
               ],
-
-              SIAP_DIPROSES: [StatusPeminjaman.DIPROSES],
-
               DIPROSES: [StatusPeminjaman.DIPAKAI],
-
               DIPAKAI: [StatusPeminjaman.SELESAI],
             };
 
@@ -222,6 +261,7 @@ export class PeminjamanSharedService {
       // 1. DP → cuma validasi, tidak ubah status
       if (data.status_bayar === StatusPembayaran.DP_DITERIMA) {
         updateData.status_bayar = StatusPembayaran.DP_DITERIMA;
+        updateData.expired_at = null;
       }
 
       // =====================================================
@@ -232,6 +272,14 @@ export class PeminjamanSharedService {
         oldStatus === StatusPeminjaman.SIAP_DIPROSES &&
         newStatus === StatusPeminjaman.DIPROSES
       ) {
+        const totalTagihanLunas =
+          peminjaman.total_terbayar >= peminjaman.total_tagihan;
+        if (!totalTagihanLunas) {
+          throw new BadRequestException(
+            'Tagihan belum lunas, tidak boleh diproses',
+          );
+        }
+
         for (const item of peminjaman.items) {
           const barang = await tx.barang.findUnique({
             where: { id: item.barangId },
@@ -243,6 +291,12 @@ export class PeminjamanSharedService {
             );
           }
 
+          if (barang.stok_dipesan < item.jumlah) {
+            throw new BadRequestException(
+              `Stok dipesan tidak cukup untuk barang ${item.barangId}`,
+            );
+          }
+
           const before = barang.stok_tersedia;
           const after = before - item.jumlah;
 
@@ -251,6 +305,7 @@ export class PeminjamanSharedService {
             data: {
               stok_tersedia: { decrement: item.jumlah },
               stok_keluar: { increment: item.jumlah },
+              stok_dipesan: { decrement: item.jumlah },
             },
           });
           // ✅ INVENTORY LOG WAJIB
@@ -280,19 +335,50 @@ export class PeminjamanSharedService {
           });
 
           if (!barang) {
-            throw new NotFoundException(
-              `Barang dengan id ${item.barangId} tidak ditemukan`,
-            );
+            throw new NotFoundException('Barang tidak ditemukan');
           }
 
+          const hasOut = await tx.inventoryLog.findFirst({
+            where: {
+              peminjamanId: peminjaman.id,
+              barangId: item.barangId,
+              tipe: 'OUT',
+            },
+          });
+
+          // BELUM OUT
+          if (!hasOut) {
+            if (barang.stok_dipesan < item.jumlah) {
+              throw new BadRequestException('Stok dipesan tidak valid');
+            }
+
+            await tx.barang.update({
+              where: { id: item.barangId },
+              data: {
+                stok_dipesan: { decrement: item.jumlah },
+              },
+            });
+
+            await tx.inventoryLog.create({
+              data: {
+                barangId: item.barangId,
+                peminjamanId: peminjaman.id,
+                tipe: 'RELEASE',
+                jumlah: item.jumlah,
+                before_stock: barang.stok_tersedia,
+                after_stock: barang.stok_tersedia,
+              },
+            });
+
+            continue;
+          }
+
+          // SUDAH OUT
           if (barang.stok_keluar < item.jumlah) {
-            throw new BadRequestException(
-              `Stok tidak cukup untuk barang ${item.barangId}`,
-            );
+            throw new BadRequestException('Stok keluar tidak valid');
           }
 
           const before = barang.stok_tersedia;
-          const after = before + item.jumlah;
 
           await tx.barang.update({
             where: { id: item.barangId },
@@ -309,15 +395,23 @@ export class PeminjamanSharedService {
               tipe: 'RETURN',
               jumlah: item.jumlah,
               before_stock: before,
-              after_stock: after,
+              after_stock: before + item.jumlah,
             },
           });
         }
       }
+
+      let auditNote = `\n[${new Date().toISOString()}] Status: ${oldStatus} → ${newStatus} oleh ${actorId}`;
+      if (data.status_bayar) {
+        auditNote += ` | Pembayaran: ${peminjaman.status_bayar} → ${data.status_bayar}`;
+      }
       // 4. Eksekusi Update
       return tx.peminjaman.update({
         where: { id: peminjamanId },
-        data: updateData,
+        data: {
+          ...updateData,
+          keterangan: `${peminjaman.keterangan || ''}${auditNote}`,
+        },
         include: {
           user: true,
 
@@ -342,6 +436,156 @@ export class PeminjamanSharedService {
           zona: true,
         },
       });
+    });
+  }
+
+  async getAuditTrail(peminjamanId: string) {
+    const peminjaman = await this.prisma.peminjaman.findUnique({
+      where: { id: peminjamanId },
+      include: {
+        user: { include: { detail: true } },
+        items: {
+          include: { barang: true },
+        },
+        biayaDetails: {
+          orderBy: { createdAt: 'desc' },
+        },
+        pembayaran: {
+          include: {
+            verifiedBy: { select: { id: true, username: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        deliveredBy: { select: { id: true, username: true } },
+        receivedBy: { select: { id: true, username: true } },
+        approvedBy: { select: { id: true, username: true } },
+        inventoryLogs: {
+          include: { barang: true },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!peminjaman) throw new NotFoundException('Peminjaman tidak ditemukan');
+
+    // Parse keterangan menjadi kronologi
+    const kronologi =
+      peminjaman.keterangan
+        ?.split('\n')
+        .filter((line) => line.startsWith('['))
+        .map((line) => {
+          const match = line.match(/\[(.*?)\]\s(.*)/);
+          return {
+            timestamp: match ? new Date(match[1]) : null,
+            event: match ? match[2] : line,
+            raw: line,
+          };
+        }) || [];
+
+    return {
+      id: peminjaman.id,
+      customer: peminjaman.user.detail?.nama_lengkap,
+
+      // Timeline status
+      status_peminjaman: {
+        saat_ini: peminjaman.status_pinjam,
+        history: kronologi.filter((k) => k.event.includes('status')),
+      },
+
+      // Timeline petugas
+      petugas: {
+        pengantar: peminjaman.deliveredBy,
+        penerima: peminjaman.receivedBy,
+        approver: peminjaman.approvedBy,
+      },
+
+      // Detail barang & kondisi
+      barang: peminjaman.items.map((item) => ({
+        nama: item.barang.nama,
+        jumlah: item.jumlah,
+        harga_satuan: item.harga_satuan,
+        kondisi_kembali: item.kondisi_kembali,
+      })),
+
+      // Detail denda (dari biayaDetails)
+      denda: peminjaman.biayaDetails
+        .filter((b) => b.tipe === 'DENDA')
+        .map((d) => ({
+          label: d.label,
+          jumlah: d.jumlah,
+          jenis: d.jenis_denda,
+          quantity: d.qty,
+          barang_id: d.barangId,
+        })),
+
+      total_denda: peminjaman.total_denda,
+
+      // Detail deposit
+      deposit: {
+        awal: peminjaman.deposit,
+        kembali: peminjaman.deposit_kembali,
+        sudah_dikembalikan: peminjaman.deposit_dikembalikan,
+      },
+
+      // Pembayaran
+      pembayaran: peminjaman.pembayaran.map((p) => ({
+        jumlah: p.jumlah,
+        tipe: p.tipe,
+        status: p.status,
+        metode: p.metode,
+        verified_by: p.verifiedBy?.username,
+        verified_at: p.verifiedAt,
+      })),
+
+      // Pergerakan stok
+      stok_movement: peminjaman.inventoryLogs.map((log) => ({
+        barang: log.barang.nama,
+        tipe: log.tipe,
+        jumlah: log.jumlah,
+        before: log.before_stock,
+        after: log.after_stock,
+        timestamp: log.createdAt,
+      })),
+
+      // Dokumen
+      dokumen: {
+        foto_serah_terima: peminjaman.foto_serah_terima,
+        foto_pengembalian: peminjaman.foto_pengembalian,
+        kondisi_keluar: peminjaman.kondisi_barang_keluar,
+      },
+
+      // Kronologi lengkap
+      kronologi,
+    };
+  }
+
+  // ==========================================
+  // GET ALL
+  // ==========================================
+
+  async findAll() {
+    return this.prisma.peminjaman.findMany({
+      include: {
+        user: {
+          include: {
+            detail: true,
+          },
+        },
+        items: {
+          include: {
+            barang: {
+              /* ... select barang ... */
+            },
+          },
+        },
+        paket: true,
+        approvedBy: { select: { id: true, username: true } },
+        deliveredBy: { select: { id: true, username: true } },
+        receivedBy: { select: { id: true, username: true } },
+        zona: true,
+        biayaDetails: true,
+      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 }

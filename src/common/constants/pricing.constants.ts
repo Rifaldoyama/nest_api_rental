@@ -1,0 +1,14 @@
+export const PRICING = {
+  DP_PERCENT: 0.35,
+  DEPOSIT_PERCENT: 0.4,
+  MAX_RENTAL_DAYS: 30,
+  PROGRESSIVE: {
+    DAY_1_MULTIPLIER: 1.0,
+    DAY_2_MULTIPLIER: 0.7,
+    DAY_3_PLUS_MULTIPLIER: 0.5,
+  },
+  EXPIRY: {
+    HOURS: 1,
+    MAX_EXTENSIONS: 3,
+  },
+} as const;

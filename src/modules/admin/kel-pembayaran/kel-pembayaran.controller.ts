@@ -24,6 +24,10 @@ import { Role } from '@prisma/client';
 export class AdminKelPembayaranController {
   constructor(private service: AdminKelPembayaranService) {}
 
+  // ===============================
+  // REKENING TUJUAN (CRUD)
+  // ===============================
+
   @Post()
   create(@Body() dto: CreateMetodeDto) {
     return this.service.create(dto);
@@ -39,7 +43,10 @@ export class AdminKelPembayaranController {
     return this.service.toggleStatus(id);
   }
 
-  //transaksi
+  // ===============================
+  // PEMBAYARAN (LIST & DETAIL)
+  // ===============================
+
   @Get('verifikasi-list')
   getVerifikasiList(@Query('status') status?: string) {
     if (!status || status === 'ALL') {
@@ -55,14 +62,48 @@ export class AdminKelPembayaranController {
     );
   }
 
-  @Patch('verifikasi/:id')
-  verifikasi(@Param('id') id: string, @Request() req) {
-    // Ambil ID admin dari token JWT
-    return this.service.verifikasi(id, req.user.userId);
+  @Get('pembayaran/:id')
+  getDetail(@Param('id') id: string) {
+    return this.service.getDetail(id);
   }
 
-  @Patch('tolak/:id')
-  tolak(@Param('id') id: string, @Request() req) {
-    return this.service.tolak(id, req.user.userId);
+  // ===============================
+  // VERIFIKASI PEMBAYARAN (DENGAN ALLOCATION)
+  // ===============================
+
+  @Post('verify-payment/:id')
+  verifyPayment(
+    @Param('id') id: string,
+    @Request() req,
+    @Body() body: { status: 'VERIFIED' | 'REJECTED'; catatan?: string },
+  ) {
+    if (!body.status || !['VERIFIED', 'REJECTED'].includes(body.status)) {
+      throw new BadRequestException('Status harus VERIFIED atau REJECTED');
+    }
+
+    return this.service.verifyPayment(
+      req.user.userId,
+      id,
+      body.status,
+      body.catatan,
+    );
+  }
+  // ===============================
+  // DEPOSIT
+  // ===============================
+
+  @Post('deposit/:peminjamanId/kembalikan')
+  kembalikanDeposit(
+    @Param('peminjamanId') peminjamanId: string,
+    @Request() req,
+  ) {
+    return this.service.kembalikanDeposit(req.user.userId, peminjamanId);
+  }
+
+  @Get('deposit')
+  async getDepositList(
+    @Query('status') status: 'all' | 'pending' | 'done' = 'pending',
+  ) {
+    return this.service.getPeminjamanForDepositRefund(status);
   }
 }

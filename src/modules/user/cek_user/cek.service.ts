@@ -55,4 +55,24 @@ export class CekUserService {
       status: user.detail.verification_status,
     };
   }
+
+  async getUserDetail(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        detail: {
+          select: {
+            nama_lengkap: true,
+            no_hp: true,
+            alamat: true,
+            no_ktp: true,
+            verification_status: true,
+            is_lengkap: true,
+          },
+        },
+      },
+    });
+
+    return user?.detail || null;
+  }
 }

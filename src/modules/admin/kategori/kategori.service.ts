@@ -29,7 +29,6 @@ export class KategoriService {
   findAll(options?: { admin?: boolean }) {
     return this.prisma.kategori.findMany({
       orderBy: { createdAt: 'desc' },
-      // Jika bukan admin, hanya tampilkan yang aktif
       where: options?.admin ? {} : { isActive: true },
     });
   }
@@ -42,35 +41,51 @@ export class KategoriService {
 
     if (file) {
       if (kategori.gambar) {
-        await this.minio.delete(kategori.gambar).catch(() => null); 
+        await this.minio.delete(kategori.gambar).catch(() => null);
       }
-      // 2. Upload file baru
       objectName = await this.minio.upload(file, 'kategori');
+    }
+
+    // 🔥 FIX: Siapkan data update dengan benar
+    const updateData: any = {};
+
+    // Update nama jika ada
+    if (dto.nama !== undefined) {
+      updateData.nama = dto.nama;
+    }
+
+    // 🔥 FIX: Handle isActive dengan benar (bisa dari boolean atau string)
+    if (dto.isActive !== undefined) {
+      // Konversi ke boolean jika perlu
+      updateData.isActive =
+        typeof dto.isActive === 'boolean'
+          ? dto.isActive
+          : dto.isActive === 'true' || dto.isActive === true;
+    }
+
+    // Update gambar jika ada file baru
+    if (file) {
+      updateData.gambar = objectName;
     }
 
     return this.prisma.kategori.update({
       where: { id },
-      data: {
-        ...dto,
-        gambar: objectName,
-      },
+      data: updateData,
     });
   }
 
   async remove(id: string) {
     const kategori = await this.prisma.kategori.findUnique({
       where: { id },
-      include: { _count: { select: { barang: true } } }
+      include: { _count: { select: { barang: true } } },
     });
 
     if (!kategori) throw new NotFoundException('Kategori tidak ditemukan');
 
-    // Cek relasi menggunakan count agar lebih efisien
     if (kategori._count.barang > 0) {
       throw new BadRequestException('Kategori masih dipakai oleh barang');
     }
 
-    // Hapus gambar di Minio sebelum hapus record di DB
     if (kategori.gambar) {
       await this.minio.delete(kategori.gambar).catch(() => null);
     }

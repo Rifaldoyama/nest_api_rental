@@ -12,6 +12,8 @@ import {
   StatusPembayaran,
   TipePembayaran,
   StatusPeminjaman,
+  TipePembayaranAllocation,
+  JaminanTipe,
 } from '@prisma/client';
 
 import { CreatePembayaranDto } from './dto/create-pembayaran.dto';
@@ -60,7 +62,11 @@ export class UserPembayaranService {
       throw new BadRequestException('Peminjaman sudah selesai');
     }
 
-    if (peminjaman.expired_at && new Date() > peminjaman.expired_at) {
+    if (
+      peminjaman.expired_at &&
+      new Date() > peminjaman.expired_at &&
+      peminjaman.status_bayar === StatusPembayaran.BELUM_BAYAR
+    ) {
       throw new BadRequestException('Transaksi sudah expired');
     }
 
@@ -150,18 +156,22 @@ export class UserPembayaranService {
 
     if (!rekening) throw new BadRequestException('Rekening tidak valid');
 
-    if (peminjaman.jaminan_tipe !== 'DEPOSIT_UANG' && peminjaman.deposit > 0)
-      throw new BadRequestException(
-        'Deposit tidak berlaku untuk jaminan non uang',
-      );
+    if (
+      peminjaman.jaminan_tipe === JaminanTipe.DEPOSIT_UANG &&
+      peminjaman.deposit === 0
+    ) {
+      throw new BadRequestException('Deposit wajib diisi untuk jaminan uang');
+    }
 
+    const dpAmount = peminjaman.nominal_dp;
     const depositAmount =
-      peminjaman.jaminan_tipe === 'DEPOSIT_UANG' ? peminjaman.deposit : 0;
-
-    const totalBayar = peminjaman.nominal_dp + depositAmount;
+      peminjaman.jaminan_tipe === JaminanTipe.DEPOSIT_UANG
+        ? peminjaman.deposit
+        : 0;
+    const totalBayar = dpAmount + depositAmount;
 
     return this.prisma.$transaction(async (tx) => {
-      const pembayaran = await tx.pembayaran.create({
+      const pembayaranDP = await tx.pembayaran.create({
         data: {
           peminjamanId,
           jumlah: totalBayar,
@@ -169,20 +179,38 @@ export class UserPembayaranService {
           tipe: TipePembayaran.DP,
           rekeningTujuanId,
           status: StatusVerifikasiPembayaran.PENDING,
+          allocations: {
+            create: [
+              {
+                tipe: TipePembayaranAllocation.DP,
+                jumlah: dpAmount,
+              },
+              ...(depositAmount > 0
+                ? [
+                    {
+                      tipe: TipePembayaranAllocation.DEPOSIT,
+                      jumlah: depositAmount,
+                    },
+                  ]
+                : []),
+            ],
+          },
         },
+        include: { allocations: true },
       });
 
+      // 3. Update status peminjaman
       await tx.peminjaman.update({
         where: { id: peminjamanId },
         data: {
           status_bayar: StatusPembayaran.MENUNGGU_VERIFIKASI_DP,
+          expired_at: new Date(Date.now() + 60 * 60 * 1000),
         },
       });
 
-      return pembayaran;
+      return pembayaranDP;
     });
   }
-
   // ===============================
   // CREATE PELUNASAN
   // ===============================
@@ -205,7 +233,11 @@ export class UserPembayaranService {
       throw new BadRequestException('Peminjaman sudah selesai');
     }
 
-    if (peminjaman.expired_at && new Date() > peminjaman.expired_at) {
+    if (
+      peminjaman.expired_at &&
+      new Date() > peminjaman.expired_at &&
+      peminjaman.status_bayar === StatusPembayaran.BELUM_BAYAR
+    ) {
       throw new BadRequestException('Transaksi sudah expired');
     }
 
@@ -221,9 +253,18 @@ export class UserPembayaranService {
 
     if (!rekening) throw new BadRequestException('Rekening tidak valid');
 
-    if (peminjaman.status_bayar !== StatusPembayaran.DP_DITERIMA) {
-      throw new BadRequestException('DP belum diverifikasi');
+    const allowedStatuses: StatusPembayaran[] = [
+      StatusPembayaran.MENUNGGU_VERIFIKASI_DP,
+      StatusPembayaran.DP_DITERIMA,
+    ];
+
+    if (!allowedStatuses.includes(peminjaman.status_bayar)) {
+      throw new BadRequestException('DP belum dibayar');
     }
+
+    // if (peminjaman.status_bayar !== StatusPembayaran.DP_DITERIMA) {
+    //   throw new BadRequestException('DP belum diverifikasi');
+    // }
 
     const activePayment = await this.prisma.pembayaran.findFirst({
       where: {
@@ -251,10 +292,12 @@ export class UserPembayaranService {
     if (existingPelunasan)
       throw new BadRequestException('Pelunasan sudah dibuat');
 
-    if (peminjaman.jaminan_tipe !== 'DEPOSIT_UANG' && peminjaman.deposit > 0)
-      throw new BadRequestException(
-        'Deposit tidak berlaku untuk jaminan non uang',
-      );
+    if (
+      peminjaman.jaminan_tipe === JaminanTipe.DEPOSIT_UANG &&
+      peminjaman.deposit === 0
+    ) {
+      throw new BadRequestException('Deposit wajib diisi untuk jaminan uang');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const pembayaran = await tx.pembayaran.create({
@@ -265,7 +308,14 @@ export class UserPembayaranService {
           tipe: TipePembayaran.PELUNASAN,
           rekeningTujuanId,
           status: StatusVerifikasiPembayaran.PENDING,
+          allocations: {
+            create: {
+              tipe: TipePembayaranAllocation.PELUNASAN,
+              jumlah: peminjaman.sisa_tagihan,
+            },
+          },
         },
+        include: { allocations: true },
       });
 
       await tx.peminjaman.update({
@@ -301,7 +351,11 @@ export class UserPembayaranService {
     if (peminjaman.status_bayar === StatusPembayaran.LUNAS)
       throw new BadRequestException('Sudah lunas');
 
-    if (peminjaman.expired_at && new Date() > peminjaman.expired_at) {
+    if (
+      peminjaman.expired_at &&
+      new Date() > peminjaman.expired_at &&
+      peminjaman.status_bayar === StatusPembayaran.BELUM_BAYAR
+    ) {
       throw new BadRequestException('Transaksi sudah expired');
     }
 
@@ -347,15 +401,19 @@ export class UserPembayaranService {
     if (existingFull)
       throw new BadRequestException('Full payment sudah dibuat');
 
+    if (
+      peminjaman.jaminan_tipe === JaminanTipe.DEPOSIT_UANG &&
+      peminjaman.deposit === 0
+    ) {
+      throw new BadRequestException('Deposit wajib diisi untuk jaminan uang');
+    }
+
+    const totalSewa = peminjaman.total_sewa;
     const depositAmount =
-      peminjaman.jaminan_tipe === 'DEPOSIT_UANG' ? peminjaman.deposit : 0;
-
-    const totalBayar = peminjaman.total_biaya + depositAmount;
-
-    if (peminjaman.jaminan_tipe !== 'DEPOSIT_UANG' && peminjaman.deposit > 0)
-      throw new BadRequestException(
-        'Deposit tidak berlaku untuk jaminan non uang',
-      );
+      peminjaman.jaminan_tipe === JaminanTipe.DEPOSIT_UANG
+        ? peminjaman.deposit
+        : 0;
+    const totalBayar = peminjaman.total_tagihan;
 
     return this.prisma.$transaction(async (tx) => {
       const pembayaran = await tx.pembayaran.create({
@@ -366,13 +424,30 @@ export class UserPembayaranService {
           tipe: TipePembayaran.FULL,
           status: StatusVerifikasiPembayaran.PENDING,
           rekeningTujuanId,
+          allocations: {
+            create: [
+              {
+                tipe: TipePembayaranAllocation.SEWA,
+                jumlah: totalSewa,
+              },
+              ...(depositAmount > 0
+                ? [
+                    {
+                      tipe: TipePembayaranAllocation.DEPOSIT,
+                      jumlah: depositAmount,
+                    },
+                  ]
+                : []),
+            ],
+          },
         },
+        include: { allocations: true },
       });
 
       await tx.peminjaman.update({
         where: { id: peminjamanId },
         data: {
-          status_bayar: StatusPembayaran.MENUNGGU_VERIFIKASI_PELUNASAN,
+          status_bayar: StatusPembayaran.MENUNGGU_VERIFIKASI_FULL,
         },
       });
 

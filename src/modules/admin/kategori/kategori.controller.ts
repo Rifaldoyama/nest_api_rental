@@ -10,6 +10,7 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { KategoriService } from './kategori.service';
 import { CreateKategoriDto } from './dto/create.dto';
@@ -24,6 +25,8 @@ import { Role } from '@prisma/client';
 @Roles(Role.ADMIN)
 @Controller('admin/kategori')
 export class KategoriController {
+  private readonly logger = new Logger(KategoriController.name);
+
   constructor(private readonly service: KategoriService) {}
 
   @Post()
@@ -38,17 +41,31 @@ export class KategoriController {
 
   @Get()
   findAll() {
-    return this.service.findAll({ admin: true }); // Kita modif service agar bisa filter
+    return this.service.findAll({ admin: true });
   }
 
   @Patch(':id')
-  @UseInterceptors(FileInterceptor('file')) // Tambahkan interceptor di sini
+  @UseInterceptors(FileInterceptor('file'))
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateKategoriDto,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    return this.service.update(id, dto, file);
+    this.logger.log(`Updating kategori ${id} with data:`, dto);
+
+    // 🔥 FIX: Handle FormData dengan benar
+    // Jika dto adalah string (dari FormData), parse terlebih dahulu
+    let updateDto = dto;
+    if (typeof dto === 'string') {
+      try {
+        updateDto = JSON.parse(dto);
+      } catch (e) {
+        // Jika tidak bisa parse, buat object dari field yang ada
+        updateDto = {} as UpdateKategoriDto;
+      }
+    }
+
+    return this.service.update(id, updateDto, file);
   }
 
   @Delete(':id')

@@ -16,6 +16,8 @@ import { UserPembayaranModule } from './modules/user/pembayaran/pembayaran.modul
 import { PaketModule } from './modules/admin/paket/paket.module';
 import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
 import { RiwayatTransaksiModule } from './modules/admin/riwayat-transaksi/riwayat-transaksi.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ExpiredModule } from './modules/corn/expired.module';
 
 @Module({
   imports: [
@@ -36,6 +38,8 @@ import { RiwayatTransaksiModule } from './modules/admin/riwayat-transaksi/riwaya
     PaketModule,
     DashboardModule,
     RiwayatTransaksiModule,
+    ScheduleModule.forRoot(),
+    ExpiredModule,
   ],
   controllers: [],
   providers: [],

@@ -1,4 +1,4 @@
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, Min, IsIn } from 'class-validator';
 
 export class UpdateBarangDto {
   @IsOptional()
@@ -21,9 +21,18 @@ export class UpdateBarangDto {
   @IsOptional()
   @IsInt()
   @Min(0)
-  stok_total?: number; // opsional admin correction
+  stok_total?: number;
 
   @IsOptional()
   @IsString()
   gambar?: string;
+
+  @IsOptional()
+  @IsIn(['pcs', 'unit', 'meter', 'set', 'kg'])
+  satuan?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  denda_telat_per_hari?: number;
 }

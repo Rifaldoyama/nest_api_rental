@@ -9,15 +9,15 @@ export class PublicCatalogService {
     private minio: MinioService,
   ) {}
 
-  private hitungStokPaket(paket) {
-    if (!paket.items.length) return 0;
+  private hitungStokPaket(items: any[]): number {
+    if (!items || items.length === 0) return 0;
 
-    const stokList = paket.items.map((item) => {
-      const stokBarang = item.barang.stok ?? 0;
+    const stokPerBarang = items.map((item) => {
+      const stokBarang = item.barang?.stok_tersedia ?? 0;
       return Math.floor(stokBarang / item.jumlah);
     });
 
-    return Math.min(...stokList);
+    return Math.min(...stokPerBarang);
   }
 
   // =====================
@@ -41,6 +41,7 @@ export class PublicCatalogService {
         nama: true,
         deskripsi: true,
         stok_tersedia: true,
+        stok_dipesan: true,
         harga_sewa: true,
         gambar: true,
         kategori: {
@@ -99,11 +100,17 @@ export class PublicCatalogService {
     });
 
     return Promise.all(
-      paketList.map(async (paket) => ({
-        ...paket,
-        stok_paket: this.hitungStokPaket(paket),
-        gambar: paket.gambar ? await this.minio.getFileUrl(paket.gambar) : null,
-      })),
+      paketList.map(async (paket) => {
+        const totalPaket = this.hitungStokPaket(paket.items);
+
+        return {
+          ...paket,
+          total_paket: totalPaket,
+          gambar: paket.gambar
+            ? await this.minio.getFileUrl(paket.gambar)
+            : null,
+        };
+      }),
     );
   }
 
@@ -113,7 +120,14 @@ export class PublicCatalogService {
       include: {
         items: {
           include: {
-            barang: true,
+            barang: {
+              select: {
+                nama: true,
+                harga_sewa: true,
+                gambar: true,
+                stok_tersedia: true,
+              },
+            },
           },
         },
       },
@@ -123,9 +137,12 @@ export class PublicCatalogService {
       throw new NotFoundException('Paket tidak ditemukan');
     }
 
+    // ✅ Hitung stok paket realtime
+    const totalPaket = this.hitungStokPaket(paket.items);
+
     return {
       ...paket,
-      stok_paket: this.hitungStokPaket(paket),
+      total_paket: totalPaket, // ✅ Override dengan nilai realtime
       gambar: paket.gambar ? await this.minio.getFileUrl(paket.gambar) : null,
     };
   }
