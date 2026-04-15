@@ -12,8 +12,9 @@
 
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-
     "strict": true,
+    "noImplicitAny": false,
+    "strictPropertyInitialization": false,
 
     "sourceMap": true,
     "skipLibCheck": true,

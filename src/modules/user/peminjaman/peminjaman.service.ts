@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { PrismaService } from 'prisma/prisma.service';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { VerificationStatus, JaminanTipe } from '@prisma/client';
 import { CreatePeminjamanDto } from './dto/create-peminjaman.dto';
 import { MinioService } from 'src/common/minio/minio.service';
