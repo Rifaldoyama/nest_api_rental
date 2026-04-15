@@ -18,6 +18,7 @@ import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
 import { RiwayatTransaksiModule } from './modules/admin/riwayat-transaksi/riwayat-transaksi.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ExpiredModule } from './modules/corn/expired.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -41,7 +42,9 @@ import { ExpiredModule } from './modules/corn/expired.module';
     ScheduleModule.forRoot(),
     ExpiredModule,
   ],
-  controllers: [],
+  controllers: [
+    AppController
+  ],
   providers: [],
 })
 export class AppModule {}
