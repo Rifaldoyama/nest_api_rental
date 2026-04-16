@@ -4,9 +4,11 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
   const allowedOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',')
     : [];
+
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
@@ -27,14 +29,32 @@ async function bootstrap() {
       },
     }),
   );
+
   const port = process.env.PORT || 3000;
+
   await app.listen(port, '0.0.0.0');
+
   console.log(`🚀 Application is running on port: ${port}`);
   console.log('PORT FROM ENV:', process.env.PORT);
+
+  // ✅ TARUH DI SINI
+  setInterval(() => {
+    console.log('APP STILL ALIVE');
+  }, 3000);
+
+  process.on('uncaughtException', (err) => {
+    console.error('UNCAUGHT EXCEPTION:', err);
+  });
+
+  process.on('unhandledRejection', (err) => {
+    console.error('UNHANDLED REJECTION:', err);
+  });
+
   console.log('ENV CHECK:', {
-  url: process.env.SUPABASE_URL,
-  key: process.env.SUPABASE_SERVICE_KEY ? 'ADA' : 'KOSONG',
-  bucket: process.env.SUPABASE_BUCKET,
-});
+    url: process.env.SUPABASE_URL,
+    key: process.env.SUPABASE_SERVICE_KEY ? 'ADA' : 'KOSONG',
+    bucket: process.env.SUPABASE_BUCKET,
+  });
 }
+
 bootstrap();
