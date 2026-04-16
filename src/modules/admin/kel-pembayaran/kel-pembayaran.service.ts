@@ -19,7 +19,7 @@ export class AdminKelPembayaranService {
   constructor(
     private prisma: PrismaService,
     private minio: MinioService,
-  ) {}
+  ) { }
 
   async create(dto: CreateMetodeDto) {
     return this.prisma.rekeningTujuan.create({
@@ -216,14 +216,38 @@ export class AdminKelPembayaranService {
               newStatusBayar = StatusPembayaran.LUNAS;
             }
           } else if (alloc.tipe === 'SEWA') {
-            // ✅ Handler untuk FULL PAYMENT
-            updateData.total_terbayar = { increment: alloc.jumlah };
-            updateData.sisa_tagihan = { decrement: alloc.jumlah };
-            // FULL payment langsung lunas
+            // 🔥 PERBAIKAN: Handler untuk FULL PAYMENT dengan validasi
+            const currentSisa = peminjaman.sisa_tagihan || 0;
+            const totalTagihan = peminjaman.total_tagihan || 0;
+
+            // Cek apakah sudah ada DP
+            const existingDP = await tx.pembayaran.findFirst({
+              where: {
+                peminjamanId: pembayaran.peminjamanId,
+                tipe: 'DP',
+                status: 'VERIFIED',
+              },
+            });
+
+            if (existingDP) {
+              // Sudah ada DP, treat sebagai pelunasan
+              if (currentSisa < alloc.jumlah) {
+                throw new BadRequestException(`Jumlah melebihi sisa tagihan`);
+              }
+              updateData.total_terbayar = { increment: alloc.jumlah };
+              updateData.sisa_tagihan = { decrement: alloc.jumlah };
+            } else {
+              // FULL langsung tanpa DP
+              updateData.total_terbayar = { increment: alloc.jumlah };
+              updateData.sisa_tagihan = totalTagihan - alloc.jumlah;
+            }
             newStatusBayar = StatusPembayaran.LUNAS;
           }
         }
 
+        if (updateData.sisa_tagihan === 0 || (updateData.sisa_tagihan?.decrement && updateData.sisa_tagihan.decrement < 0)) {
+          updateData.sisa_tagihan = 0;
+        }
         // Update peminjaman
         await tx.peminjaman.update({
           where: { id: pembayaran.peminjamanId },

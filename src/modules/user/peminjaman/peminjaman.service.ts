@@ -25,7 +25,7 @@ export class PeminjamanService {
   constructor(
     private prisma: PrismaService,
     private minio: MinioService,
-  ) {}
+  ) { }
 
   // ==========================================
   // HELPER: HITUNG TOTAL HARI
@@ -256,13 +256,18 @@ export class PeminjamanService {
 
           total_sewa: totalSewa,
           total_biaya: totalBiaya,
-          total_tagihan: totalTagihan, // ✅
+          total_tagihan: totalTagihan,
           total_nilai_asli: totalNilaiAsli,
 
           nominal_dp: nominalDp,
-          sisa_tagihan: sisaTagihan, // ✅
+          sisa_tagihan: sisaTagihan,
 
           deposit: depositAmount,
+
+          // ✅ TAMBAHKAN 3 BARIS INI:
+          jaminan_tipe: dto.jaminan_tipe,
+          jaminan_detail: dto.jaminan_detail || null,
+          jaminan_status: 'DITAHAN',
 
           status_pinjam: initialStatus,
           status_bayar: StatusPembayaran.BELUM_BAYAR,
@@ -542,23 +547,26 @@ export class PeminjamanService {
     doc.font('Helvetica-Bold').text('Pembayaran');
     doc.moveDown(0.5);
 
+    // 🔥 PERBAIKAN: Langsung pakai data dari tabel peminjaman
+    const totalTagihan = data.total_tagihan;
+    const totalDibayar = data.total_terbayar;
+    let sisaTagihan = totalTagihan - totalDibayar;
+
+    // 🔥 NORMALISASI: Jika status LUNAS, sisa harus 0
+    if (data.status_bayar === 'LUNAS') {
+      sisaTagihan = 0;
+    }
+
+    // 🔥 Ambil data pembayaran dari database (untuk ditampilkan di struk)
     const dp = data.pembayaran.find(
       (p) => p.tipe === 'DP' && p.status === 'VERIFIED',
     );
-
     const pelunasan = data.pembayaran.find(
       (p) => p.tipe === 'PELUNASAN' && p.status === 'VERIFIED',
     );
-
     const full = data.pembayaran.find(
       (p) => p.tipe === 'FULL' && p.status === 'VERIFIED',
     );
-
-    // ✅ Perhitungan yang benar
-    const totalTagihan = data.total_tagihan;
-    const totalDibayar =
-      (dp?.jumlah || 0) + (pelunasan?.jumlah || 0) + (full?.jumlah || 0);
-    const sisaTagihan = totalTagihan - totalDibayar;
 
     // ================= LOGIC PER TYPE =================
     switch (type) {
@@ -585,10 +593,8 @@ export class PeminjamanService {
           drawRow('Pembayaran Full', formatRupiah(full.jumlah));
           drawRow('Sisa Tagihan', formatRupiah(0));
         } else {
-          // Sudah bayar DP + Pelunasan
-          if (dp) drawRow('DP', formatRupiah(dp.jumlah));
-          if (pelunasan) drawRow('Pelunasan', formatRupiah(pelunasan.jumlah));
-          drawRow('TOTAL DIBAYAR', formatRupiah(totalDibayar));
+          // Sudah bayar DP + Pelunasan (atau langsung dari total_terbayar)
+          drawRow('Total Pembayaran', formatRupiah(totalDibayar));
           drawRow('Sisa Tagihan', formatRupiah(0));
         }
         break;

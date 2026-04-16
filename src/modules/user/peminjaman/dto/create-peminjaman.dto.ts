@@ -53,6 +53,7 @@ export class CreatePeminjamanDto {
   items?: PeminjamanItemDto[];
 
   @IsEnum(JaminanTipe)
+  @IsNotEmpty()
   jaminan_tipe: JaminanTipe;
 
   @IsOptional()
@@ -62,7 +63,7 @@ export class CreatePeminjamanDto {
   @IsOptional()
   @IsString()
   bank_pengembalian?: string;
-
+  
   @IsOptional()
   @IsString()
   nomor_rekening_pengembalian?: string;
