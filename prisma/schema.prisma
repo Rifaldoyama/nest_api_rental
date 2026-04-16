@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,9 +8,272 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// =======================
-// ENUM
-// =======================
+model User {
+  id                  String       @id @default(uuid())
+  email               String       @unique
+  username            String       @unique
+  password            String
+  role                Role
+  createdAt           DateTime     @default(now())
+  verifiedPayments    Pembayaran[] @relation("PaymentVerifier")
+  approvedPeminjaman  Peminjaman[] @relation("ApprovedBy")
+  deliveredPeminjaman Peminjaman[] @relation("DeliveredBy")
+  receivedPeminjaman  Peminjaman[] @relation("ReceivedBy")
+  peminjaman          Peminjaman[]
+  testimoni           Testimoni[]
+  detail              UserDetail?
+}
+
+model UserDetail {
+  id                  String             @id @default(uuid())
+  userId              String             @unique
+  nama_lengkap        String
+  no_hp               String
+  alamat              String
+  no_ktp              String?
+  foto_ktp            String?
+  foto_selfie         String?
+  is_lengkap          Boolean            @default(false)
+  verification_status VerificationStatus @default(UNVERIFIED)
+  user                User               @relation(fields: [userId], references: [id])
+}
+
+model Kategori {
+  id        String   @id @default(uuid())
+  nama      String
+  gambar    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  barang    Barang[]
+}
+
+model Barang {
+  id                   String                  @id @default(uuid())
+  nama                 String
+  stok_total           Int
+  stok_tersedia        Int
+  stok_dipesan         Int                     @default(0)
+  stok_keluar          Int                     @default(0)
+  satuan               String
+  harga_sewa           Int
+  deskripsi            String?
+  gambar               String?
+  denda_ringan         Float                   @default(0.2)
+  denda_sedang         Float                   @default(0.5)
+  denda_berat          Float                   @default(0.8)
+  denda_hilang         Float                   @default(1)
+  denda_telat_per_hari Int?                    @default(0)
+  kategoriId           String
+  isActive             Boolean                 @default(true)
+  kategori             Kategori                @relation(fields: [kategoriId], references: [id])
+  inventoryLogs        InventoryLog[]
+  paketItems           PaketBarang[]
+  items                PeminjamanBarang[]
+  biayaDetails         PeminjamanBiayaDetail[]
+}
+
+model InventoryLog {
+  id           String        @id @default(uuid())
+  barangId     String
+  peminjamanId String?
+  tipe         InventoryTipe
+  before_stock Int
+  after_stock  Int
+  jumlah       Int
+  createdAt    DateTime      @default(now())
+  barang       Barang        @relation(fields: [barangId], references: [id])
+  peminjaman   Peminjaman?   @relation(fields: [peminjamanId], references: [id])
+}
+
+model Paket {
+  id            String        @id @default(uuid())
+  nama          String
+  diskon_persen Int?
+  harga_final   Int
+  deskripsi     String?
+  gambar        String?
+  total_paket   Float
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  items         PaketBarang[]
+  peminjaman    Peminjaman[]
+}
+
+model PaketBarang {
+  id                   String @id @default(uuid())
+  paketId              String
+  barangId             String
+  nama_barang_snapshot String
+  kategori_snapshot    String
+  harga_saat_itu       Int
+  jumlah               Int
+  barang               Barang @relation(fields: [barangId], references: [id])
+  paket                Paket  @relation(fields: [paketId], references: [id])
+
+  @@unique([paketId, barangId])
+}
+
+model Peminjaman {
+  id                          String                  @id @default(uuid())
+  userId                      String
+  approvedById                String?
+  deliveredById               String?
+  receivedById                String?
+  tanggal_mulai               DateTime
+  tanggal_selesai             DateTime
+  tanggal_kembali             DateTime?
+  metode_ambil                MetodePengambilan
+  alamat_acara                String?
+  zonaId                      String?
+  total_biaya                 Int
+  total_sewa                  Int
+  total_denda                 Int                     @default(0)
+  total_tagihan               Int                     @default(0)
+  total_terbayar              Int                     @default(0)
+  total_nilai_asli            Int?
+  total_hari                  Int                     @default(0)
+  nominal_dp                  Int                     @default(0)
+  sisa_tagihan                Int                     @default(0)
+  deposit                     Int                     @default(0)
+  deposit_kembali             Int                     @default(0)
+  deposit_dikembalikan        Boolean                 @default(false)
+  status_pinjam               StatusPeminjaman        @default(MENUNGGU_PERSETUJUAN)
+  status_bayar                StatusPembayaran        @default(BELUM_BAYAR)
+  jaminan_tipe                JaminanTipe?
+  jaminan_detail              String?
+  jaminan_status              JaminanStatus           @default(DITAHAN)
+  nama_rekening_pengembalian  String?
+  bank_pengembalian           String?
+  nomor_rekening_pengembalian String?
+  foto_serah_terima           String?
+  foto_pengembalian           String?
+  kondisi_barang_keluar       KondisiBarang?
+  file_surat_jalan            String?
+  keterangan                  String?
+  paketId                     String?
+  expired_at                  DateTime?
+  createdAt                   DateTime                @default(now())
+  inventoryLogs               InventoryLog[]
+  pembayaran                  Pembayaran[]
+  approvedBy                  User?                   @relation("ApprovedBy", fields: [approvedById], references: [id])
+  deliveredBy                 User?                   @relation("DeliveredBy", fields: [deliveredById], references: [id])
+  paket                       Paket?                  @relation(fields: [paketId], references: [id])
+  receivedBy                  User?                   @relation("ReceivedBy", fields: [receivedById], references: [id])
+  user                        User                    @relation(fields: [userId], references: [id])
+  zona                        ZonaPengiriman?         @relation(fields: [zonaId], references: [id])
+  items                       PeminjamanBarang[]
+  biayaDetails                PeminjamanBiayaDetail[]
+  testimoni                   Testimoni?
+
+  @@index([userId])
+  @@index([status_pinjam])
+  @@index([status_bayar])
+  @@index([tanggal_mulai, tanggal_selesai])
+}
+
+model PeminjamanBiayaDetail {
+  id           String      @id @default(uuid())
+  sumber_id    String?
+  peminjamanId String
+  barangId     String?
+  tipe         TipeBiaya
+  label        String
+  jumlah       Int
+  jenis_denda  JenisDenda?
+  qty          Int?
+  createdAt    DateTime    @default(now())
+  barang       Barang?     @relation(fields: [barangId], references: [id])
+  peminjaman   Peminjaman  @relation(fields: [peminjamanId], references: [id])
+}
+
+model PeminjamanBarang {
+  id                    String         @id @default(uuid())
+  peminjamanId          String
+  barangId              String
+  jumlah                Int
+  harga_satuan          Int
+  kondisi_kembali       KondisiBarang?
+  nama_barang_snapshot  String
+  kategori_snapshot     String
+  harga_saat_itu        Int
+  satuan_snapshot       String
+  denda_ringan_snapshot Float?
+  denda_sedang_snapshot Float?
+  denda_berat_snapshot  Float?
+  denda_hilang_snapshot Float?
+  denda_telat_snapshot  Int?
+  barang                Barang         @relation(fields: [barangId], references: [id])
+  peminjaman            Peminjaman     @relation(fields: [peminjamanId], references: [id])
+}
+
+model Pembayaran {
+  id                 String                     @id @default(uuid())
+  peminjamanId       String
+  jumlah             Int
+  metode             MetodePembayaran
+  tipe               TipePembayaran
+  status             StatusVerifikasiPembayaran @default(PENDING)
+  rekeningTujuanId   String?
+  bukti_pembayaran   String?
+  catatan            String?
+  keterangan_ditolak String?
+  verifiedById       String?
+  verifiedAt         DateTime?
+  createdAt          DateTime                   @default(now())
+  peminjaman         Peminjaman                 @relation(fields: [peminjamanId], references: [id])
+  rekeningTujuan     RekeningTujuan?            @relation(fields: [rekeningTujuanId], references: [id])
+  verifiedBy         User?                      @relation("PaymentVerifier", fields: [verifiedById], references: [id])
+  allocations        PembayaranAllocation[]
+
+  @@index([peminjamanId])
+  @@index([status])
+  @@index([tipe])
+  @@index([createdAt])
+  @@index([peminjamanId, status])
+}
+
+model PembayaranAllocation {
+  id           String                   @id @default(uuid())
+  pembayaranId String
+  tipe         TipePembayaranAllocation
+  jumlah       Int
+  pembayaran   Pembayaran               @relation(fields: [pembayaranId], references: [id])
+}
+
+model RekeningTujuan {
+  id         String           @id @default(uuid())
+  nama       String
+  nomor      String
+  metode     MetodePembayaran
+  atas_nama  String
+  instruksi  String?
+  aktif      Boolean          @default(true)
+  createdAt  DateTime         @default(now())
+  pembayaran Pembayaran[]
+}
+
+model ZonaPengiriman {
+  id         String       @id @default(uuid())
+  nama       String
+  jarak_min  Float
+  jarak_max  Float
+  biaya      Int
+  createdAt  DateTime     @default(now())
+  peminjaman Peminjaman[]
+}
+
+model Testimoni {
+  id           String     @id @default(uuid())
+  userId       String
+  peminjamanId String     @unique
+  rating       Int
+  komentar     String?
+  createdAt    DateTime   @default(now())
+  peminjaman   Peminjaman @relation(fields: [peminjamanId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+}
+
 enum Role {
   ADMIN
   PETUGAS
@@ -84,7 +341,7 @@ enum TipePembayaran {
   PELUNASAN
   DENDA
   FULL
-  REFUND_DEPOSIT 
+  REFUND_DEPOSIT
 }
 
 enum TipePembayaranAllocation {
@@ -126,420 +383,4 @@ enum InventoryTipe {
   RELEASE
   OUT
   RETURN
-}
-
-// =======================
-// USER
-// =======================
-model User {
-  id       String @id @default(uuid())
-  email    String @unique
-  username String @unique
-  password String
-  role     Role
-
-  detail     UserDetail?
-  peminjaman Peminjaman[]
-  testimoni  Testimoni[]
-
-  // =========================
-  // RELASI BARU (WAJIB)
-  // =========================
-
-  approvedPeminjaman Peminjaman[] @relation("ApprovedBy")
-
-  deliveredPeminjaman Peminjaman[] @relation("DeliveredBy")
-
-  receivedPeminjaman Peminjaman[] @relation("ReceivedBy")
-
-  // =========================
-
-  verifiedPayments Pembayaran[] @relation("PaymentVerifier")
-
-  createdAt DateTime @default(now())
-}
-
-// =======================
-// USER DETAIL (KTP)
-// =======================
-model UserDetail {
-  id     String @id @default(uuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id])
-
-  nama_lengkap String
-  no_hp        String
-  alamat       String
-
-  no_ktp   String?
-  foto_ktp String?
-
-  foto_selfie String?
-
-  is_lengkap          Boolean            @default(false)
-  verification_status VerificationStatus @default(UNVERIFIED)
-}
-
-// =======================
-// KATEGORI
-// =======================
-model Kategori {
-  id     String  @id @default(uuid())
-  nama   String
-  gambar String?
-
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  barang Barang[]
-}
-
-// =======================
-// BARANG
-// =======================
-model Barang {
-  id   String @id @default(uuid())
-  nama String
-
-  stok_total    Int
-  stok_tersedia Int
-  stok_dipesan  Int @default(0)
-  stok_keluar   Int @default(0)
-
-  satuan String // pcs, meter, unit
-
-  harga_sewa Int
-  deskripsi  String?
-  gambar     String?
-
-  denda_ringan Float @default(0.2) 
-  denda_sedang Float @default(0.5)
-  denda_berat  Float @default(0.8)
-  denda_hilang Float @default(1)
-
-  denda_telat_per_hari Int? @default(0)
-
-  kategoriId String
-  kategori   Kategori @relation(fields: [kategoriId], references: [id])
-
-  items PeminjamanBarang[]
-  inventoryLogs InventoryLog[]
-  paketItems    PaketBarang[]
-  biayaDetails  PeminjamanBiayaDetail[]
-
-  isActive Boolean @default(true)
-}
-
-// =======================
-// InventoryLog
-// =======================
-model InventoryLog {
-  id String @id @default(uuid())
-
-  barangId String
-  barang   Barang @relation(fields: [barangId], references: [id])
-
-  peminjamanId String?
-  peminjaman   Peminjaman? @relation(fields: [peminjamanId], references: [id])
-
-  tipe InventoryTipe
-
-  before_stock Int
-  after_stock  Int
-
-  jumlah Int
-
-  createdAt DateTime @default(now())
-}
-
-// =======================
-// PAKET
-// =======================
-model Paket {
-  id          String @id @default(uuid())
-  nama        String
-
-  diskon_persen Int?
-  harga_final   Int
-
-  deskripsi String?
-  gambar    String?
-  total_paket   Float  
-
-  isActive Boolean @default(true)
-
-  peminjaman Peminjaman[]
-  items      PaketBarang[]
-  createdAt  DateTime      @default(now())
-}
-
-model PaketBarang {
-  id       String @id @default(uuid())
-  paketId  String
-  barangId String
-  nama_barang_snapshot    String
-  kategori_snapshot       String
-  harga_saat_itu Int
-  jumlah   Int
-
-  paket  Paket  @relation(fields: [paketId], references: [id])
-  barang Barang @relation(fields: [barangId], references: [id])
-
-  @@unique([paketId, barangId])
-}
-
-// =======================
-// PEMINJAMAN (TRANSAKSI UTAMA)
-// =======================
-model Peminjaman {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  // ========================
-  // ADMIN
-  // ========================
-
-  approvedById String?
-  approvedBy   User?   @relation("ApprovedBy", fields: [approvedById], references: [id])
-
-  // ========================
-  // PETUGAS PENGANTAR
-  // ========================
-
-  deliveredById String?
-  deliveredBy   User?   @relation("DeliveredBy", fields: [deliveredById], references: [id])
-
-  // ========================
-  // PETUGAS TERIMA KEMBALI
-  // ========================
-
-  receivedById String?
-  receivedBy   User?   @relation("ReceivedBy", fields: [receivedById], references: [id])
-
-  // Data Waktu
-  tanggal_mulai   DateTime
-  tanggal_selesai DateTime
-  tanggal_kembali DateTime?
-
-  // Data Lokasi
-  metode_ambil MetodePengambilan
-  alamat_acara String?
-
-  zonaId String?
-  zona   ZonaPengiriman? @relation(fields: [zonaId], references: [id])
-
-  // Data Biaya & Pembayaran (LOGIC BARU)
-  total_biaya Int
-  total_sewa  Int
-
-  // Tagiahan
-  total_denda Int @default(0)
-  total_tagihan Int @default(0)
-  total_terbayar Int @default(0)
-  total_nilai_asli Int?
-  total_hari Int @default(0)
-
-  nominal_dp   Int @default(0)
-  sisa_tagihan Int @default(0)
-
-  deposit              Int     @default(0)
-  deposit_kembali      Int     @default(0)
-  deposit_dikembalikan Boolean @default(false)
-
-  // Data Status
-  status_pinjam StatusPeminjaman @default(MENUNGGU_PERSETUJUAN)
-  status_bayar  StatusPembayaran @default(BELUM_BAYAR)
-
-  // Data Jaminan & Keamanan (LOGIC BARU)
-  jaminan_tipe   JaminanTipe?
-  jaminan_detail String?
-  jaminan_status JaminanStatus @default(DITAHAN)
-
-  nama_rekening_pengembalian  String?
-  bank_pengembalian           String?
-  nomor_rekening_pengembalian String?
-
-  // Dokumen Serah Terima / Surat Jalan (LOGIC BARU)
-  foto_serah_terima     String? // Foto user pegang barang saat diterima
-  foto_pengembalian     String?
-  kondisi_barang_keluar KondisiBarang? 
-  file_surat_jalan      String? 
-
-  keterangan String?
-  paketId    String?
-  paket      Paket?    @relation(fields: [paketId], references: [id])
-  expired_at DateTime?
-
-  items        PeminjamanBarang[]
-  biayaDetails PeminjamanBiayaDetail[]
-  pembayaran   Pembayaran[]
-  inventoryLogs InventoryLog[]
-  testimoni    Testimoni?
-  createdAt    DateTime                @default(now())
-
-  @@index([userId])
-  @@index([status_pinjam])
-  @@index([status_bayar])
-  @@index([tanggal_mulai, tanggal_selesai])
-}
-
-model PeminjamanBiayaDetail {
-  id        String  @id @default(uuid())
-  sumber_id String? // optional (zonaId, damage report, dll)
-
-  peminjamanId String
-  peminjaman   Peminjaman @relation(fields: [peminjamanId], references: [id])
-
-  barangId String? 
-  barang   Barang? @relation(fields: [barangId], references: [id])
-
-  tipe  TipeBiaya
-  label String
-
-  jumlah Int
-  jenis_denda JenisDenda?    
-  qty          Int?   
-
-  createdAt DateTime @default(now())
-}
-
-// =======================
-// RELASI PEMINJAMAN - BARANG
-// =======================
-model PeminjamanBarang {
-  id String @id @default(uuid())
-
-  peminjamanId String
-  barangId     String
-
-  jumlah Int
-
-  // =========================
-  // 🔥 TAMBAHKAN FIELD INI:
-  // =========================
-  harga_satuan Int  // ← TAMBAHKAN INI (harga per unit saat peminjaman)
-  kondisi_kembali KondisiBarang?  // ← TAMBAHKAN INI (kondisi barang saat kembali)
-
-  // =========================
-  // 🔥 SNAPSHOT WAJIB (AUDIT)
-  // =========================
-  nama_barang_snapshot String
-  kategori_snapshot    String
-
-  harga_saat_itu Int
-  satuan_snapshot String
-
-  // 🔥 DENDA SNAPSHOT
-  denda_ringan_snapshot Float?
-  denda_sedang_snapshot Float?
-  denda_berat_snapshot  Float?
-  denda_hilang_snapshot Float?
-
-  denda_telat_snapshot Int?
-
-  // =========================
-
-  barang      Barang      @relation(fields: [barangId], references: [id])
-  peminjaman  Peminjaman  @relation(fields: [peminjamanId], references: [id])
-}
-
-// =======================
-// PEMBAYARAN
-// =======================
-model Pembayaran {
-  id String @id @default(uuid())
-
-  peminjamanId String
-  peminjaman   Peminjaman @relation(fields: [peminjamanId], references: [id])
-
-  jumlah Int
-
-  metode MetodePembayaran
-
-  tipe TipePembayaran
-
-  status StatusVerifikasiPembayaran @default(PENDING)
-
-  rekeningTujuanId String?
-  rekeningTujuan   RekeningTujuan? @relation(fields: [rekeningTujuanId], references: [id])
-
-  bukti_pembayaran String?
-
-  catatan String?
-  keterangan_ditolak String? 
-
-  verifiedById String?
-  verifiedBy   User?   @relation("PaymentVerifier", fields: [verifiedById], references: [id])
-
-  verifiedAt DateTime?
-
-  allocations PembayaranAllocation[]
-
-  createdAt DateTime @default(now())
-
-  @@index([peminjamanId])
-  @@index([status])
-   @@index([tipe])                   
-  @@index([createdAt])              
-  @@index([peminjamanId, status]) 
-}
-
-model PembayaranAllocation {
-  id             String @id @default(uuid())
-  pembayaranId   String
-  tipe           TipePembayaranAllocation // DP / DEPOSIT
-  jumlah         Int
-
-  pembayaran     Pembayaran @relation(fields: [pembayaranId], references: [id])
-}
-
-// =======================  
-// REKENIG TUJUAN
-// =======================
-model RekeningTujuan {
-  id String @id @default(uuid())
-
-  nama  String // contoh: BCA, DANA, OVO
-  nomor String // nomor rekening / nomor hp / QR URL
-
-  metode MetodePembayaran
-
-  atas_nama String
-
-  instruksi String? // optional
-
-  aktif      Boolean      @default(true)
-  pembayaran Pembayaran[]
-
-  createdAt DateTime @default(now())
-}
-
-model ZonaPengiriman {
-  id String @id @default(uuid())
-
-  nama String
-
-  jarak_min Float
-  jarak_max Float
-
-  biaya      Int
-  peminjaman Peminjaman[]
-
-  createdAt DateTime @default(now())
-}
-
-model Testimoni {
-  id           String @id @default(uuid())
-  userId       String
-  peminjamanId String @unique
-
-  user       User       @relation(fields: [userId], references: [id])
-  peminjaman Peminjaman @relation(fields: [peminjamanId], references: [id])
-
-  rating   Int
-  komentar String?
-
-  createdAt DateTime @default(now())
 }
