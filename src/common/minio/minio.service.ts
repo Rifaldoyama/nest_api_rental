@@ -1,62 +1,68 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import * as Minio from 'minio';
+import { Injectable } from '@nestjs/common';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 @Injectable()
 export class MinioService {
-  private client: Minio.Client;
+  private supabase: SupabaseClient;
   private bucket: string;
 
   constructor() {
-    if (!process.env.MINIO_BUCKET) {
-      throw new Error('MINIO_BUCKET is not defined');
-    }
+    const url = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_KEY;
+    const bucket = process.env.SUPABASE_BUCKET;
 
-    this.bucket = process.env.MINIO_BUCKET;
+    if (!url) throw new Error('SUPABASE_URL is not defined');
+    if (!key) throw new Error('SUPABASE_SERVICE_KEY is not defined');
+    if (!bucket) throw new Error('SUPABASE_BUCKET is not defined');
 
-    this.client = new Minio.Client({
-      endPoint: process.env.MINIO_ENDPOINT!,
-      port: Number(process.env.MINIO_PORT),
-      useSSL: process.env.MINIO_USE_SSL === 'true',
-      accessKey: process.env.MINIO_ACCESS_KEY!,
-      secretKey: process.env.MINIO_SECRET_KEY!,
-    });
+    this.bucket = bucket;
+    this.supabase = createClient(url, key);
   }
 
-  async upload(file: Express.Multer.File, path: string) {
+  async upload(file: Express.Multer.File, path: string): Promise<string> {
     const objectName = `${path}/${Date.now()}-${file.originalname}`;
 
-    await this.client.putObject(
-      this.bucket,
-      objectName,
-      file.buffer,
-      file.size,
-      {
-        'Content-Type': file.mimetype,
-      },
-    );
+    const { error } = await this.supabase.storage
+      .from(this.bucket)
+      .upload(objectName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      });
+
+    if (error) {
+      throw new Error(`Gagal upload file ke Supabase Storage: ${error.message}`);
+    }
 
     return objectName;
   }
-  async delete(objectName: string) {
+
+  async delete(objectName: string): Promise<boolean> {
     try {
-      await this.client.removeObject(this.bucket, objectName);
+      const { error } = await this.supabase.storage
+        .from(this.bucket)
+        .remove([objectName]);
+
+      if (error) {
+        console.error(`Gagal menghapus file ${objectName} di Supabase Storage:`, error.message);
+        return false;
+      }
+
       return true;
     } catch (error) {
-      console.error(`Gagal menghapus file ${objectName} di Minio:`, error);
+      console.error(`Gagal menghapus file ${objectName} di Supabase Storage:`, error);
       return false;
     }
   }
 
-  async getFileUrl(objectName: string) {
+  getFileUrl(objectName: string): string | null {
     try {
-      // Generate URL yang berlaku selama 1 jam (3600 detik)
-      return await this.client.presignedGetObject(
-        this.bucket,
-        objectName,
-        3600,
-      );
+      const { data } = this.supabase.storage
+        .from(this.bucket)
+        .getPublicUrl(objectName);
+
+      return data.publicUrl;
     } catch (error) {
-      console.error('Gagal generate URL Minio:', error);
+      console.error('Gagal generate URL Supabase Storage:', error);
       return null;
     }
   }
