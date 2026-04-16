@@ -30,6 +30,7 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Application is running on port: ${port}`);
+  console.log('PORT FROM ENV:', process.env.PORT);
   console.log('ENV CHECK:', {
   url: process.env.SUPABASE_URL,
   key: process.env.SUPABASE_SERVICE_KEY ? 'ADA' : 'KOSONG',
