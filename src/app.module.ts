@@ -21,30 +21,7 @@ import { ExpiredModule } from './modules/corn/expired.module';
 import { AppController } from './app.controller';
 
 @Module({
-  imports: [
-    PrismaModule,
-    AuthModule,
-    CekUserModule,
-    UserDetailModule,
-    BarangModule,
-    KategoriModule,
-    VerifyUserModule,
-    PeminjamanModule,
-    PublicCatalogModule,
-    PetugasPeminjamanModule,
-    AdminZonaModule,
-    AdminPeminjamanModule,
-    AdminKelPembayaranModule,
-    UserPembayaranModule,
-    PaketModule,
-    DashboardModule,
-    RiwayatTransaksiModule,
-    ScheduleModule.forRoot(),
-    ExpiredModule,
-  ],
-  controllers: [
-    AppController
-  ],
-  providers: [],
+  imports: [],
+  controllers: [AppController],
 })
 export class AppModule {}
